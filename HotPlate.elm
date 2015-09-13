@@ -15,18 +15,17 @@ type alias State =
   , size : Int
   , cells : List Float
   }
-initialState = State 0 (toFloat 0) gridSize (List.map toFloat (List.repeat (gridSize*gridSize) 50))
+initialState = State
+  -1
+  (toFloat 50)
+  gridSize
+  (List.map toFloat (List.repeat (gridSize*gridSize) 50))
 
 posFromIndex : Int -> (Int,Int)
-posFromIndex index =
-  let
-    x = index % gridSize
-    y = index // gridSize
-  in
-    (x,y)
+posFromIndex index = (index % gridSize,index // gridSize)
 
-sum : List Float -> Float
-sum list = (List.sum list) / toFloat (List.length list)
+average : List Float -> Float
+average list = (List.sum list) / toFloat (List.length list)
 
 roundTo : Int -> Float -> Float
 roundTo pow float =
@@ -37,14 +36,17 @@ roundTo pow float =
 update : Float -> State -> State
 update timeDelta state =
   let
-    newCells = updateCells timeDelta state.cells
+    newCells = updateCells state.cells
     largestDiff = calculateCellDiff state.cells newCells
   in
-    { state
-    | iteration <- state.iteration+1
-    , lastLargestDiff <- largestDiff
-    , cells <- newCells
-    }
+    if  | state.lastLargestDiff <= 0.001 ->
+          state
+        | otherwise ->
+          { state
+          | iteration <- state.iteration+1
+          , lastLargestDiff <- largestDiff
+          , cells <- newCells
+          }
 
 calculateCellDiff : List Float -> List Float -> Float
 calculateCellDiff oldCells newCells =
@@ -53,10 +55,10 @@ calculateCellDiff oldCells newCells =
     |> List.sort
     |> List.reverse
     |> List.head
-    |> Maybe.withDefault 0
+    |> Maybe.withDefault 1
 
-updateCells : Float -> List Float -> List Float
-updateCells timeDelta cells =
+updateCells : List Float -> List Float
+updateCells cells =
   List.indexedMap (\index cell ->
     let
       (x,y) = posFromIndex index
@@ -64,11 +66,11 @@ updateCells timeDelta cells =
     in
       if  | (x == 0 || x == gridSize-1) && (y == 0 || y == gridSize-1) -> 0
           | (x == floor mid || x == ceiling mid) && (y == floor mid || y == ceiling mid) -> 100
-          | otherwise -> updateCell timeDelta index cells cell
+          | otherwise -> updateCell index cells cell
   ) cells
 
-updateCell : Float -> Int -> List Float -> Float -> Float
-updateCell timeDelta pos cells cell =
+updateCell : Int -> List Float -> Float -> Float
+updateCell pos cells cell =
   let
     (x,y) = posFromIndex pos
   in
@@ -77,12 +79,13 @@ updateCell timeDelta pos cells cell =
       |> List.filter (\{index, cell} ->
         let
           (x',y') = posFromIndex index
-          distance = sqrt (toFloat ((x-x')^2 + (y-y')^2))
+          dx = abs (x - x')
+          dy = abs (y - y')
         in
-          distance == 1
+          xor (dx == 1 && dy == 0) (dx == 0 && dy == 1)
       )
       |> List.map .cell
-      |> sum
+      |> average
 
 
 -- view
@@ -91,7 +94,7 @@ view state =
   List.indexedMap viewCell state.cells
     |> List.concat
     |> (::) (state.iteration |> toString |> Text.fromString |> text |> move (-30,0))
-    |> (::) (roundTo 4 state.lastLargestDiff |> toString |> Text.fromString |> text |> move (30,0))
+    |> (::) (roundTo 6 state.lastLargestDiff |> toString |> Text.fromString |> text |> move (30,0))
     |> List.reverse
     |> collage size size
 
@@ -126,4 +129,4 @@ state : Signal State
 state = Signal.foldp update initialState timeDelta
 
 timeDelta : Signal Float
-timeDelta = Signal.map Time.inSeconds (Time.fps 2)
+timeDelta = Signal.map Time.inSeconds (Time.fps 30)

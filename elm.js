@@ -1920,17 +1920,25 @@ Elm.Main.make = function (_elm) {
    $Time = Elm.Time.make(_elm);
    var timeDelta = A2($Signal.map,
    $Time.inSeconds,
-   $Time.fps(60));
+   $Time.fps(30));
    var calculateCellDiff = F2(function (oldCells,
    newCells) {
-      return $Maybe.withDefault(0)($List.head($List.reverse($List.sort($List.map($Basics.abs)(A3($List.map2,
+      return $Maybe.withDefault(1)($List.head($List.reverse($List.sort($List.map($Basics.abs)(A3($List.map2,
       F2(function (x,y) {
          return x - y;
       }),
       oldCells,
       newCells))))));
    });
-   var sum = function (list) {
+   var roundTo = F2(function (pow,
+   $float) {
+      return function () {
+         var places = Math.pow(10,
+         pow - 1);
+         return $Basics.toFloat($Basics.round($float * places)) / places;
+      }();
+   });
+   var average = function (list) {
       return $List.sum(list) / $Basics.toFloat($List.length(list));
    };
    var State = F4(function (a,
@@ -1943,10 +1951,10 @@ Elm.Main.make = function (_elm) {
              ,lastLargestDiff: b
              ,size: c};
    });
-   var gridSize = 20;
+   var gridSize = 16;
    var initialState = A4(State,
-   0,
-   $Basics.toFloat(0),
+   -1,
+   $Basics.toFloat(50),
    gridSize,
    A2($List.map,
    $Basics.toFloat,
@@ -1954,23 +1962,20 @@ Elm.Main.make = function (_elm) {
    gridSize * gridSize,
    50)));
    var posFromIndex = function (index) {
-      return function () {
-         var y = index / gridSize | 0;
-         var x = A2($Basics._op["%"],
-         index,
-         gridSize);
-         return {ctor: "_Tuple2"
-                ,_0: x
-                ,_1: y};
-      }();
+      return {ctor: "_Tuple2"
+             ,_0: A2($Basics._op["%"],
+             index,
+             gridSize)
+             ,_1: index / gridSize | 0};
    };
-   var updateCell = F2(function (pos,
-   cells) {
+   var updateCell = F3(function (pos,
+   cells,
+   cell) {
       return function () {
          var $ = posFromIndex(pos),
          x = $._0,
          y = $._1;
-         return sum($List.map(function (_) {
+         return average($List.map(function (_) {
             return _.cell;
          })($List.filter(function (_v0) {
             return function () {
@@ -1978,9 +1983,11 @@ Elm.Main.make = function (_elm) {
                   var $ = posFromIndex(_v0.index),
                   x$ = $._0,
                   y$ = $._1;
-                  var distance = $Basics.sqrt($Basics.toFloat(Math.pow(x - x$,
-                  2) + Math.pow(y - y$,2)));
-                  return _U.cmp(distance,1) < 1;
+                  var dx = $Basics.abs(x - x$);
+                  var dy = $Basics.abs(y - y$);
+                  return A2($Basics.xor,
+                  _U.eq(dx,1) && _U.eq(dy,0),
+                  _U.eq(dx,0) && _U.eq(dy,1));
                }();
             }();
          })($List.indexedMap(F2(function (i,
@@ -2006,9 +2013,10 @@ Elm.Main.make = function (_elm) {
             $Basics.floor(mid)) || _U.eq(x,
             $Basics.ceiling(mid))) && (_U.eq(y,
             $Basics.floor(mid)) || _U.eq(y,
-            $Basics.ceiling(mid))) ? 100 : A2(updateCell,
+            $Basics.ceiling(mid))) ? 100 : A3(updateCell,
             index,
-            cells);
+            cells,
+            cell);
          }();
       }),
       cells);
@@ -2020,10 +2028,11 @@ Elm.Main.make = function (_elm) {
          var largestDiff = A2(calculateCellDiff,
          state.cells,
          newCells);
-         return _U.replace([["iteration"
-                            ,state.iteration + 1]
-                           ,["lastLargestDiff",largestDiff]
-                           ,["cells",newCells]],
+         return _U.cmp(state.lastLargestDiff,
+         1.0e-3) < 1 ? state : _U.replace([["iteration"
+                                           ,state.iteration + 1]
+                                          ,["lastLargestDiff",largestDiff]
+                                          ,["cells",newCells]],
          state);
       }();
    });
@@ -2031,10 +2040,13 @@ Elm.Main.make = function (_elm) {
    update,
    initialState,
    timeDelta);
-   var size = 750;
+   var size = 700;
    var viewCell = F2(function (index,
    temp) {
       return function () {
+         var color = $Basics.turns(function (c) {
+            return c / 1.5;
+         }(1 - temp / 100));
          var $ = posFromIndex(index),
          x$ = $._0,
          y$ = $._1;
@@ -2043,11 +2055,13 @@ Elm.Main.make = function (_elm) {
          var y = $Basics.toFloat(y$) * cellSize - size / 2 + cellSize / 2;
          return _L.fromArray([$Graphics$Collage.move({ctor: "_Tuple2"
                                                      ,_0: x
-                                                     ,_1: y})($Graphics$Collage.text($Text.fromString($Basics.toString($Basics.toFloat($Basics.round(temp * 100)) / 100))))
+                                                     ,_1: y})($Graphics$Collage.text($Text.fromString($Basics.toString(A2(roundTo,
+                             2,
+                             temp)))))
                              ,$Graphics$Collage.move({ctor: "_Tuple2"
                                                      ,_0: x
                                                      ,_1: y})($Graphics$Collage.filled(A3($Color.hsl,
-                             $Basics.degrees(240 - temp / 100 * 240),
+                             color,
                              1,
                              0.5))($Graphics$Collage.square(cellSize)))]);
       }();
@@ -2062,7 +2076,9 @@ Elm.Main.make = function (_elm) {
          y);
       })($Graphics$Collage.move({ctor: "_Tuple2"
                                 ,_0: 30
-                                ,_1: 0})($Graphics$Collage.text($Text.fromString($Basics.toString($Basics.toFloat($Basics.round(state.lastLargestDiff * 10000)) / 10000)))))(F2(function (x,
+                                ,_1: 0})($Graphics$Collage.text($Text.fromString($Basics.toString(A2(roundTo,
+      6,
+      state.lastLargestDiff))))))(F2(function (x,
       y) {
          return A2($List._op["::"],
          x,
@@ -2082,7 +2098,8 @@ Elm.Main.make = function (_elm) {
                       ,State: State
                       ,initialState: initialState
                       ,posFromIndex: posFromIndex
-                      ,sum: sum
+                      ,average: average
+                      ,roundTo: roundTo
                       ,update: update
                       ,calculateCellDiff: calculateCellDiff
                       ,updateCells: updateCells
