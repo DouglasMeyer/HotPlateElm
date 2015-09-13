@@ -1917,10 +1917,14 @@ Elm.Main.make = function (_elm) {
    $Result = Elm.Result.make(_elm),
    $Signal = Elm.Signal.make(_elm),
    $Text = Elm.Text.make(_elm),
-   $Time = Elm.Time.make(_elm);
+   $Time = Elm.Time.make(_elm),
+   $Window = Elm.Window.make(_elm);
    var timeDelta = A2($Signal.map,
    $Time.inSeconds,
    $Time.fps(30));
+   var input = A2($Signal.sampleOn,
+   timeDelta,
+   $Window.dimensions);
    var calculateCellDiff = F2(function (oldCells,
    newCells) {
       return $Maybe.withDefault(1)($List.head($List.reverse($List.sort($List.map($Basics.abs)(A3($List.map2,
@@ -2021,28 +2025,40 @@ Elm.Main.make = function (_elm) {
       }),
       cells);
    };
-   var update = F2(function (timeDelta,
+   var update = F2(function (_v2,
    state) {
       return function () {
-         var newCells = updateCells(state.cells);
-         var largestDiff = A2(calculateCellDiff,
-         state.cells,
-         newCells);
-         return _U.cmp(state.lastLargestDiff,
-         1.0e-3) < 1 ? state : _U.replace([["iteration"
-                                           ,state.iteration + 1]
-                                          ,["lastLargestDiff",largestDiff]
-                                          ,["cells",newCells]],
-         state);
+         switch (_v2.ctor)
+         {case "_Tuple2":
+            return function () {
+                 var newCells = updateCells(state.cells);
+                 var largestDiff = A2(calculateCellDiff,
+                 state.cells,
+                 newCells);
+                 return _U.cmp(state.lastLargestDiff,
+                 1.0e-3) < 1 ? _U.replace([["size"
+                                           ,A2($Basics.min,
+                                           _v2._0,
+                                           _v2._1)]],
+                 state) : _U.replace([["iteration"
+                                      ,state.iteration + 1]
+                                     ,["size"
+                                      ,A2($Basics.min,_v2._0,_v2._1)]
+                                     ,["lastLargestDiff",largestDiff]
+                                     ,["cells",newCells]],
+                 state);
+              }();}
+         _U.badCase($moduleName,
+         "between lines 38 and 52");
       }();
    });
    var state = A3($Signal.foldp,
    update,
    initialState,
-   timeDelta);
-   var size = 700;
-   var viewCell = F2(function (index,
-   temp) {
+   input);
+   var viewCell = F3(function (index,
+   temp,
+   size) {
       return function () {
          var color = $Basics.turns(function (c) {
             return c / 1.5;
@@ -2050,9 +2066,9 @@ Elm.Main.make = function (_elm) {
          var $ = posFromIndex(index),
          x$ = $._0,
          y$ = $._1;
-         var cellSize = size / gridSize;
-         var x = $Basics.toFloat(x$) * cellSize - size / 2 + cellSize / 2;
-         var y = $Basics.toFloat(y$) * cellSize - size / 2 + cellSize / 2;
+         var cellSize = $Basics.toFloat(size) / gridSize;
+         var x = $Basics.toFloat(x$) * cellSize - $Basics.toFloat(size) / 2 + cellSize / 2;
+         var y = $Basics.toFloat(y$) * cellSize - $Basics.toFloat(size) / 2 + cellSize / 2;
          return _L.fromArray([$Graphics$Collage.move({ctor: "_Tuple2"
                                                      ,_0: x
                                                      ,_1: y})($Graphics$Collage.text($Text.fromString($Basics.toString(A2(roundTo,
@@ -2068,8 +2084,8 @@ Elm.Main.make = function (_elm) {
    });
    var view = function (state) {
       return A2($Graphics$Collage.collage,
-      size,
-      size)($List.reverse(F2(function (x,
+      state.size,
+      state.size)($List.reverse(F2(function (x,
       y) {
          return A2($List._op["::"],
          x,
@@ -2086,14 +2102,18 @@ Elm.Main.make = function (_elm) {
       })($Graphics$Collage.move({ctor: "_Tuple2"
                                 ,_0: -30
                                 ,_1: 0})($Graphics$Collage.text($Text.fromString($Basics.toString(state.iteration)))))($List.concat(A2($List.indexedMap,
-      viewCell,
+      F2(function (i,c) {
+         return A3(viewCell,
+         i,
+         c,
+         state.size);
+      }),
       state.cells))))));
    };
    var main = A2($Signal.map,
    view,
    state);
    _elm.Main.values = {_op: _op
-                      ,size: size
                       ,gridSize: gridSize
                       ,State: State
                       ,initialState: initialState
@@ -2108,6 +2128,7 @@ Elm.Main.make = function (_elm) {
                       ,viewCell: viewCell
                       ,main: main
                       ,state: state
+                      ,input: input
                       ,timeDelta: timeDelta};
    return _elm.Main.values;
 };
@@ -6570,6 +6591,75 @@ Elm.Native.Utils.make = function(localRuntime) {
 	};
 };
 
+Elm.Native = Elm.Native || {};
+Elm.Native.Window = {};
+Elm.Native.Window.make = function(localRuntime) {
+
+	localRuntime.Native = localRuntime.Native || {};
+	localRuntime.Native.Window = localRuntime.Native.Window || {};
+	if (localRuntime.Native.Window.values)
+	{
+		return localRuntime.Native.Window.values;
+	}
+
+	var NS = Elm.Native.Signal.make(localRuntime);
+	var Tuple2 = Elm.Native.Utils.make(localRuntime).Tuple2;
+
+
+	function getWidth()
+	{
+		return localRuntime.node.clientWidth;
+	}
+
+
+	function getHeight()
+	{
+		if (localRuntime.isFullscreen())
+		{
+			return window.innerHeight;
+		}
+		return localRuntime.node.clientHeight;
+	}
+
+
+	var dimensions = NS.input('Window.dimensions', Tuple2(getWidth(), getHeight()));
+
+
+	function resizeIfNeeded()
+	{
+		// Do not trigger event if the dimensions have not changed.
+		// This should be most of the time.
+		var w = getWidth();
+		var h = getHeight();
+		if (dimensions.value._0 === w && dimensions.value._1 === h)
+		{
+			return;
+		}
+
+		setTimeout(function () {
+			// Check again to see if the dimensions have changed.
+			// It is conceivable that the dimensions have changed
+			// again while some other event was being processed.
+			var w = getWidth();
+			var h = getHeight();
+			if (dimensions.value._0 === w && dimensions.value._1 === h)
+			{
+				return;
+			}
+			localRuntime.notify(dimensions.id, Tuple2(w,h));
+		}, 0);
+	}
+
+
+	localRuntime.addListener([dimensions.id], window, 'resize', resizeIfNeeded);
+
+
+	return localRuntime.Native.Window.values = {
+		dimensions: dimensions,
+		resizeIfNeeded: resizeIfNeeded
+	};
+};
+
 Elm.Result = Elm.Result || {};
 Elm.Result.make = function (_elm) {
    "use strict";
@@ -7412,4 +7502,31 @@ Elm.Transform2D.make = function (_elm) {
                              ,scaleX: scaleX
                              ,scaleY: scaleY};
    return _elm.Transform2D.values;
+};
+Elm.Window = Elm.Window || {};
+Elm.Window.make = function (_elm) {
+   "use strict";
+   _elm.Window = _elm.Window || {};
+   if (_elm.Window.values)
+   return _elm.Window.values;
+   var _op = {},
+   _N = Elm.Native,
+   _U = _N.Utils.make(_elm),
+   _L = _N.List.make(_elm),
+   $moduleName = "Window",
+   $Basics = Elm.Basics.make(_elm),
+   $Native$Window = Elm.Native.Window.make(_elm),
+   $Signal = Elm.Signal.make(_elm);
+   var dimensions = $Native$Window.dimensions;
+   var width = A2($Signal.map,
+   $Basics.fst,
+   dimensions);
+   var height = A2($Signal.map,
+   $Basics.snd,
+   dimensions);
+   _elm.Window.values = {_op: _op
+                        ,dimensions: dimensions
+                        ,width: width
+                        ,height: height};
+   return _elm.Window.values;
 };

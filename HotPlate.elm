@@ -4,9 +4,9 @@ import Graphics.Element exposing (Element)
 import Time
 import Maybe
 import Text
+import Window
 
 -- constants
-size = 700
 gridSize = 16
 
 type alias State =
@@ -33,17 +33,20 @@ roundTo pow float =
   in toFloat (round (float * places)) / places
 
 -- update
-update : Float -> State -> State
-update timeDelta state =
+update : (Int,Int) -> State -> State
+update (h,w) state =
   let
     newCells = updateCells state.cells
     largestDiff = calculateCellDiff state.cells newCells
   in
     if  | state.lastLargestDiff <= 0.001 ->
-          state
+          { state
+          | size <- min h w
+          }
         | otherwise ->
           { state
           | iteration <- state.iteration+1
+          , size <- min h w
           , lastLargestDiff <- largestDiff
           , cells <- newCells
           }
@@ -91,20 +94,20 @@ updateCell pos cells cell =
 -- view
 view : State -> Element
 view state =
-  List.indexedMap viewCell state.cells
+  List.indexedMap (\i c -> viewCell i c state.size) state.cells
     |> List.concat
     |> (::) (state.iteration |> toString |> Text.fromString |> text |> move (-30,0))
     |> (::) (roundTo 6 state.lastLargestDiff |> toString |> Text.fromString |> text |> move (30,0))
     |> List.reverse
-    |> collage size size
+    |> collage state.size state.size
 
-viewCell : Int -> Float -> List Form
-viewCell index temp =
+viewCell : Int -> Float -> Int -> List Form
+viewCell index temp size =
   let
-    cellSize = size / gridSize
+    cellSize = toFloat size / gridSize
     (x',y') = posFromIndex(index)
-    x = toFloat x' * cellSize - size / 2 + cellSize / 2
-    y = toFloat y' * cellSize - size / 2 + cellSize / 2
+    x = toFloat x' * cellSize - toFloat size / 2 + cellSize / 2
+    y = toFloat y' * cellSize - toFloat size / 2 + cellSize / 2
     color = 1-temp/100
       |> (\c -> c / 1.5)
       |> turns
@@ -126,7 +129,10 @@ main : Signal Element
 main = Signal.map view state
 
 state : Signal State
-state = Signal.foldp update initialState timeDelta
+state = Signal.foldp update initialState input
+
+input : Signal (Int,Int)
+input = Signal.sampleOn timeDelta Window.dimensions
 
 timeDelta : Signal Float
 timeDelta = Signal.map Time.inSeconds (Time.fps 30)
