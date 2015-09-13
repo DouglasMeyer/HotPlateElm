@@ -11,10 +11,11 @@ gridSize = 16
 
 type alias State =
   { iteration: Int
+  , lastLargestDiff: Float
   , size : Int
   , cells : List Float
   }
-initialState = State 0 gridSize (List.map toFloat (List.repeat (gridSize*gridSize) 50))
+initialState = State 0 (toFloat 0) gridSize (List.map toFloat (List.repeat (gridSize*gridSize) 50))
 
 posFromIndex : Int -> (Int,Int)
 posFromIndex index =
@@ -25,26 +26,49 @@ posFromIndex index =
     (x,y)
 
 sum : List Float -> Float
-sum list = (List.foldl (+) 0.0 list) / toFloat (List.length list)
+sum list = (List.sum list) / toFloat (List.length list)
+
+roundTo : Int -> Float -> Float
+roundTo pow float =
+  let places = 10 ^ (pow-1)
+  in toFloat (round (float * places)) / places
 
 -- update
 update : Float -> State -> State
 update timeDelta state =
-  { state
-  | iteration <- state.iteration+1
-  , cells <- List.indexedMap (\index cell ->
-      let
-        (x,y) = posFromIndex index
-        mid = toFloat (gridSize - 1) / 2
-      in
-        if  | (x == 0 || x == gridSize-1) && (y == 0 || y == gridSize-1) -> 0
-            | (x == floor mid || x == ceiling mid) && (y == floor mid || y == ceiling mid) -> 100
-            | otherwise -> updateCell index state.cells
-    ) state.cells
-  }
+  let
+    newCells = updateCells timeDelta state.cells
+    largestDiff = calculateCellDiff state.cells newCells
+  in
+    { state
+    | iteration <- state.iteration+1
+    , lastLargestDiff <- largestDiff
+    , cells <- newCells
+    }
 
-updateCell : Int -> List Float -> Float
-updateCell pos cells =
+calculateCellDiff : List Float -> List Float -> Float
+calculateCellDiff oldCells newCells =
+  List.map2 (-) oldCells newCells
+    |> List.map abs
+    |> List.sort
+    |> List.reverse
+    |> List.head
+    |> Maybe.withDefault 0
+
+updateCells : Float -> List Float -> List Float
+updateCells timeDelta cells =
+  List.indexedMap (\index cell ->
+    let
+      (x,y) = posFromIndex index
+      mid = toFloat (gridSize - 1) / 2
+    in
+      if  | (x == 0 || x == gridSize-1) && (y == 0 || y == gridSize-1) -> 0
+          | (x == floor mid || x == ceiling mid) && (y == floor mid || y == ceiling mid) -> 100
+          | otherwise -> updateCell timeDelta index cells cell
+  ) cells
+
+updateCell : Float -> Int -> List Float -> Float -> Float
+updateCell timeDelta pos cells cell =
   let
     (x,y) = posFromIndex pos
   in
@@ -55,7 +79,7 @@ updateCell pos cells =
           (x',y') = posFromIndex index
           distance = sqrt (toFloat ((x-x')^2 + (y-y')^2))
         in
-          distance <= 1
+          distance == 1
       )
       |> List.map .cell
       |> sum
@@ -66,7 +90,8 @@ view : State -> Element
 view state =
   List.indexedMap viewCell state.cells
     |> List.concat
-    |> (::) (state.iteration |> toString |> Text.fromString |> text |> move (0,0))
+    |> (::) (state.iteration |> toString |> Text.fromString |> text |> move (-30,0))
+    |> (::) (roundTo 4 state.lastLargestDiff |> toString |> Text.fromString |> text |> move (30,0))
     |> List.reverse
     |> collage size size
 
@@ -77,17 +102,19 @@ viewCell index temp =
     (x',y') = posFromIndex(index)
     x = toFloat x' * cellSize - size / 2 + cellSize / 2
     y = toFloat y' * cellSize - size / 2 + cellSize / 2
+    color = 1-temp/100
+      |> (\c -> c / 1.5)
+      |> turns
   in
-    [ toFloat (round (temp * 100)) / 100
+    [ roundTo 2 temp
         |> toString
         |> Text.fromString
         |> text
         |> move (x,y)
     , square cellSize
-        |> filled (hsl (degrees (240 - temp/100*240)) 1 0.5)
+        |> filled (hsl color 1 0.5)
         |> move (x,y)
     ]
-  
 
 
 -- signals
@@ -99,4 +126,4 @@ state : Signal State
 state = Signal.foldp update initialState timeDelta
 
 timeDelta : Signal Float
-timeDelta = Signal.map Time.inSeconds (Time.fps 60)
+timeDelta = Signal.map Time.inSeconds (Time.fps 2)

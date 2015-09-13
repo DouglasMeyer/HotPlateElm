@@ -1921,25 +1921,32 @@ Elm.Main.make = function (_elm) {
    var timeDelta = A2($Signal.map,
    $Time.inSeconds,
    $Time.fps(60));
-   var sum = function (list) {
-      return A3($List.foldl,
+   var calculateCellDiff = F2(function (oldCells,
+   newCells) {
+      return $Maybe.withDefault(0)($List.head($List.reverse($List.sort($List.map($Basics.abs)(A3($List.map2,
       F2(function (x,y) {
-         return x + y;
+         return x - y;
       }),
-      0.0,
-      list) / $Basics.toFloat($List.length(list));
-   };
-   var State = F3(function (a,
-   b,
-   c) {
-      return {_: {}
-             ,cells: c
-             ,iteration: a
-             ,size: b};
+      oldCells,
+      newCells))))));
    });
-   var gridSize = 16;
-   var initialState = A3(State,
+   var sum = function (list) {
+      return $List.sum(list) / $Basics.toFloat($List.length(list));
+   };
+   var State = F4(function (a,
+   b,
+   c,
+   d) {
+      return {_: {}
+             ,cells: d
+             ,iteration: a
+             ,lastLargestDiff: b
+             ,size: c};
+   });
+   var gridSize = 20;
+   var initialState = A4(State,
    0,
+   $Basics.toFloat(0),
    gridSize,
    A2($List.map,
    $Basics.toFloat,
@@ -1984,38 +1991,47 @@ Elm.Main.make = function (_elm) {
          }))(cells))));
       }();
    });
+   var updateCells = function (cells) {
+      return A2($List.indexedMap,
+      F2(function (index,cell) {
+         return function () {
+            var mid = $Basics.toFloat(gridSize - 1) / 2;
+            var $ = posFromIndex(index),
+            x = $._0,
+            y = $._1;
+            return (_U.eq(x,0) || _U.eq(x,
+            gridSize - 1)) && (_U.eq(y,
+            0) || _U.eq(y,
+            gridSize - 1)) ? 0 : (_U.eq(x,
+            $Basics.floor(mid)) || _U.eq(x,
+            $Basics.ceiling(mid))) && (_U.eq(y,
+            $Basics.floor(mid)) || _U.eq(y,
+            $Basics.ceiling(mid))) ? 100 : A2(updateCell,
+            index,
+            cells);
+         }();
+      }),
+      cells);
+   };
    var update = F2(function (timeDelta,
    state) {
-      return _U.replace([["iteration"
-                         ,state.iteration + 1]
-                        ,["cells"
-                         ,A2($List.indexedMap,
-                         F2(function (index,cell) {
-                            return function () {
-                               var mid = $Basics.toFloat(gridSize - 1) / 2;
-                               var $ = posFromIndex(index),
-                               x = $._0,
-                               y = $._1;
-                               return (_U.eq(x,0) || _U.eq(x,
-                               gridSize - 1)) && (_U.eq(y,
-                               0) || _U.eq(y,
-                               gridSize - 1)) ? 0 : (_U.eq(x,
-                               $Basics.floor(mid)) || _U.eq(x,
-                               $Basics.ceiling(mid))) && (_U.eq(y,
-                               $Basics.floor(mid)) || _U.eq(y,
-                               $Basics.ceiling(mid))) ? 100 : A2(updateCell,
-                               index,
-                               state.cells);
-                            }();
-                         }),
-                         state.cells)]],
-      state);
+      return function () {
+         var newCells = updateCells(state.cells);
+         var largestDiff = A2(calculateCellDiff,
+         state.cells,
+         newCells);
+         return _U.replace([["iteration"
+                            ,state.iteration + 1]
+                           ,["lastLargestDiff",largestDiff]
+                           ,["cells",newCells]],
+         state);
+      }();
    });
    var state = A3($Signal.foldp,
    update,
    initialState,
    timeDelta);
-   var size = 700;
+   var size = 750;
    var viewCell = F2(function (index,
    temp) {
       return function () {
@@ -2045,10 +2061,17 @@ Elm.Main.make = function (_elm) {
          x,
          y);
       })($Graphics$Collage.move({ctor: "_Tuple2"
-                                ,_0: 0
+                                ,_0: 30
+                                ,_1: 0})($Graphics$Collage.text($Text.fromString($Basics.toString($Basics.toFloat($Basics.round(state.lastLargestDiff * 10000)) / 10000)))))(F2(function (x,
+      y) {
+         return A2($List._op["::"],
+         x,
+         y);
+      })($Graphics$Collage.move({ctor: "_Tuple2"
+                                ,_0: -30
                                 ,_1: 0})($Graphics$Collage.text($Text.fromString($Basics.toString(state.iteration)))))($List.concat(A2($List.indexedMap,
       viewCell,
-      state.cells)))));
+      state.cells))))));
    };
    var main = A2($Signal.map,
    view,
@@ -2061,6 +2084,8 @@ Elm.Main.make = function (_elm) {
                       ,posFromIndex: posFromIndex
                       ,sum: sum
                       ,update: update
+                      ,calculateCellDiff: calculateCellDiff
+                      ,updateCells: updateCells
                       ,updateCell: updateCell
                       ,view: view
                       ,viewCell: viewCell
