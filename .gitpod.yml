@@ -4,4 +4,4 @@ image: codesimple/elm
 
 tasks:
   - init: 'elm install'
-    command: 'elm reactor'
+    command: 'elm reactor -a 0.0.0.0'
