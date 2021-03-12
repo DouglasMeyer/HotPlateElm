@@ -1,7 +1,11 @@
-# image:
-#   file: .gitpod.Dockerfile
-image: codesimple/elm
+image:
+  file: .gitpod.Dockerfile
+# image: codesimple/elm
 
 tasks:
   - init: 'elm install'
-    command: 'elm reactor'
+    command: 'elm reactor --port=3000'
+
+vscode:
+  extensions:
+    - elmtooling.elm-ls-vscode@2.0.3:A/c/4djwO7BtcqUqFbi0iw==
