@@ -1,0 +1,7 @@
+# image:
+#   file: .gitpod.Dockerfile
+image: codesimple/elm
+
+tasks:
+  - init: 'elm install'
+    command: 'elm reactor'
